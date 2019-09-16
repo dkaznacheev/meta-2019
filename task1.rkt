@@ -6,10 +6,10 @@
 (define (make-ctx prg)
    (map (lambda (v) (list v 0)) (cdar prg)))
 
-(define (first-label prg) (caadr prg))
+(define (first-label prg) (caaadr prg))
 
 (define (find-block label blocks)
-  (car (find-first (lambda (b) (equal? label (car b))) blocks)))
+  (find-first (lambda (b) (equal? label (car b))) blocks))
 
 (define (find-first f l) (car (filter f l)))
 
@@ -25,13 +25,13 @@
             [cvalue (cdr elm)])
        (if (equal? name cname)
               (append prev (list (list name value)) (cdr ctx))
-              (find-and-update name (run-expr value ctx) (append prev (list elm)) (cdr ctx))))]))
+              (find-and-update name value (append prev (list elm)) (cdr ctx))))]))
 
 (define (update-ctx asgn ctx)
   (let ([name (cadr asgn)]
         [value (eval (caddr asgn))])
     (find-and-update name
-                     value;(run-expr value ctx)
+                     (run-expr value ctx)
                      '()
                      ctx)))
 
@@ -55,7 +55,7 @@
 (define (run prg)
   (let ([ctx (make-ctx prg)]
         [start (first-label prg)])
-    (run-block start ctx (cdr prg))))
+    (run-block start ctx (cadr prg))))
 
 (define p2 '((read x)
              ([1 ([:= x 100]) (goto 3)]
