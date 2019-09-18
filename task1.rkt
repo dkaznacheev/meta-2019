@@ -1,8 +1,5 @@
 #lang racket
 
-(define p1 '((read x y z)
-             (["l1" ([:= x (+ 1 2)]) (return x)])))
-
 (define (make-ctx prg)
    (map (lambda (v) (list v 0)) (cdar prg)))
 
@@ -56,14 +53,30 @@
         [start (first-label prg)])
     (run-block start ctx (cadr prg))))
 
-(define p2 '((read x)
-             ([1 ([:= x 100]) (goto 3)]
-              [2 ([:= x 400]) (goto 3)]
-              [3 () (return x)])))
+(define tm-prg '([if 1 goto 4]
+                 [write 1]
+                 [right]
+                 [goto 0]
+                 [write 0]))
 
-(define p3 '((read)
-             ([1 () (goto 2)]
-              [2 () (return (list 1 '(4 5 6) 3))])))
-
-(define p4 '((read x)
-             ([1 ([:= x '(1 2 3)]) (return x)])))
+(define tape '(0 0 0 1 0 1))
+(define tm `((read p pi ti tape inst)
+             (["init" ([:= p ',tm-prg]
+                     [:= ti 0]
+                     [:= pi 0]
+                     [:= tape ',tape]) (goto "loop")]
+              ["loop" ([:= inst (list-ref p pi)]) (goto "ifl")]
+              ["ifl" () (if (equal? (car inst) 'left) "left" "ifr")]
+              ["left" ([:= ti (- ti 1)]) (goto "next")]
+              ["ifr" () (if (equal? (car inst) 'right) "right" "ifw")]
+              ["right" ([:= ti (+ ti 1)]) (goto "next")]
+              ["ifw" () (if (equal? (car inst) 'write) "write" "ifgt")]
+              ["write" ([:= tape (setnth ti (cadr inst))]) (goto "next")]
+              ["ifgt" () (if (equal? (car inst) 'goto) "goto" "ifif")]
+              ["goto" ([:= pi (cadr inst)]) (goto "loop")]
+              ["ifif" () (if (equal? (car inst) 'if) "if" "exit")]
+              ["if" () (if (equal? (list-ref tape ti) (cadr inst)) "lb" "next")]
+              ["lb" ([:= pi (caadr inst)]) (goto "loop")]
+              ["next" () (if (equal? (+ 1 pi) (length p)) "exit" "next1")]
+              ["next1" ([:= pi (+ 1 pi)]) (goto "loop")]
+              ["exit" () (return tape)])))
