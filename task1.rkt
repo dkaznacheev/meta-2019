@@ -36,7 +36,7 @@
     (match (car jmp)
       ['return (list 'return (run-expr e ctx))]
       ['goto jmp]
-      ['if ('goto (if (run-expr e ctx) (caddr jmp) (cadddr jmp)))])))
+      ['if (list 'goto (if (run-expr e ctx) (caddr jmp) (cadddr jmp)))])))
 
 (define (run-block label ctx blocks)
   (let* ([start-block (find-block label blocks)]
@@ -53,11 +53,27 @@
         [start (first-label prg)])
     (run-block start ctx (cadr prg))))
 
+(define (set-helper p l i v)
+  (if (equal? 0 (length l))
+      p
+      (if (equal? i 0)
+          (append p (cons v (cdr l)))
+          (set-helper (append p (list (car l))) (cdr l) (- i 1) v))))
+
+(define (setnth l i v)
+  (set-helper '() l i v))
+
 (define tm-prg '([if 1 goto 4]
                  [write 1]
                  [right]
                  [goto 0]
                  [write 0]))
+
+
+(define p1 '((read)
+             (["l1" () (if (equal? 1 1) "l2" "l3")]
+              ["l2" () (return '(1 2 3))]
+              ["l3" () (return '(4 5 6))])))
 
 (define tape '(0 0 0 1 0 1))
 (define tm `((read p pi ti tape inst)
@@ -71,12 +87,12 @@
               ["ifr" () (if (equal? (car inst) 'right) "right" "ifw")]
               ["right" ([:= ti (+ ti 1)]) (goto "next")]
               ["ifw" () (if (equal? (car inst) 'write) "write" "ifgt")]
-              ["write" ([:= tape (setnth ti (cadr inst))]) (goto "next")]
+              ["write" ([:= tape (setnth tape ti (cadr inst))]) (goto "next")]
               ["ifgt" () (if (equal? (car inst) 'goto) "goto" "ifif")]
               ["goto" ([:= pi (cadr inst)]) (goto "loop")]
               ["ifif" () (if (equal? (car inst) 'if) "if" "exit")]
               ["if" () (if (equal? (list-ref tape ti) (cadr inst)) "lb" "next")]
-              ["lb" ([:= pi (caadr inst)]) (goto "loop")]
+              ["lb" ([:= pi (cadddr inst)]) (goto "loop")]
               ["next" () (if (equal? (+ 1 pi) (length p)) "exit" "next1")]
               ["next1" ([:= pi (+ 1 pi)]) (goto "loop")]
               ["exit" () (return tape)])))
