@@ -1,7 +1,7 @@
 #lang racket
 
-(define (make-ctx prg)
-   (map (lambda (v) (list v 0)) (cdar prg)))
+(define (make-ctx prg input)
+   (cons `(input ',input) (map (lambda (v) (list v 0)) (cdar prg))))
 
 (define (first-label prg) (caaadr prg))
 
@@ -48,8 +48,8 @@
       ['return (cadr res)]
       ['goto (run-block (cadr res) new-ctx blocks)])))
 
-(define (run prg)
-  (let ([ctx (make-ctx prg)]
+(define (run prg input)
+  (let ([ctx (make-ctx prg input)]
         [start (first-label prg)])
     (run-block start ctx (cadr prg))))
 
@@ -68,19 +68,14 @@
                  [right]
                  [goto 0]
                  [write 0]))
-
-
-(define p1 '((read)
-             (["l1" () (if (equal? 1 1) "l2" "l3")]
-              ["l2" () (return '(1 2 3))]
-              ["l3" () (return '(4 5 6))])))
-
 (define tape '(0 0 0 1 0 1))
+(define tm-in `(,tape ,tm-prg))
+
 (define tm `((read p pi ti tape inst)
-             (["init" ([:= p ',tm-prg]
-                     [:= ti 0]
-                     [:= pi 0]
-                     [:= tape ',tape]) (goto "loop")]
+             (["init" ([:= tape (car input)]
+                       [:= p (cadr input)]
+                       [:= ti 0]
+                       [:= pi 0]) (goto "loop")]
               ["loop" ([:= inst (list-ref p pi)]) (goto "ifl")]
               ["ifl" () (if (equal? (car inst) 'left) "left" "ifr")]
               ["left" ([:= ti (- ti 1)]) (goto "next")]
