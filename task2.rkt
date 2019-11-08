@@ -99,23 +99,28 @@
               (initblock     [:= pp (caar pending)]
                              [:= vs (cadar pending)]
                              [:= pending (cdr pending)]
-                             [:= bb (cdr (find-block pp (cdr program)))]
+                             [:= bb (cdr (find-block pp program))]
                              [:= lbl (list pp vs)]
                              [:= code (list lbl)]
                              [goto cmd-loop])
-              (cmd-loop      [if (null? bb) mainloop check-asgn])
-              (check-asgn    [:= cmd (car bb)]
-                             [if (equal? ':= cmd) mix-asgn check-goto])
-               
-              [mix-asgn ([:= command (car b-asgns)]
-                         [:= b-asgns (cdr b-asgns)]) (if (is-static division (cadr command)) s-asgn d-asgn)]
-              [s-asgn ([:= vs (update-ctx command vs)] (goto asgn-loop))]
-              [d-asgn ([:= asgns (append asgns (list (
-                                                      list (:= (cadr command) (reduce (caddr command) vs)))))])
-                      (goto asgn-loop)]
+              (cmd-loop      [if (null? bb) mainloop cmd-init])
+              (cmd-init      [:= command (car bb)]
+                             [:= cmd (car command)]
+                             [:= bb (cdr bb)]
+                             [goto check-asgn])
+              (check-asgn    [if (equal? ':= cmd) mix-asgn check-goto])
+              (mix-asgn      [if (is-static division (cadr command)) s-asgn d-asgn])
+              (s-asgn        [:= vs (update-ctx (caddr command) vs)]
+                             [goto cmd-loop])
+              (d-asgn        [:= code (append code (list (:= (cadr command) (reduce (caddr command) vs))))]
+                             [goto cmd-loop])
               
               (check-goto    [if (equal? goto cmd) mix-goto check-if])
+              (mix-goto      [:= bb (cdr (find-block (cadr command) program))]
+                             [goto cmd-loop])
+              
               (check-if      [if (equal? if cmd) mix-if check-return])
-              (check-return  [if (equal? goto cmd) mix-goto check-if])
-                          
-               [exit () (return residual)])))
+              (check-return  [if (equal? goto cmd) mix-return check-if])
+
+              (exit          [return residual])
+              (error         [return 'ERROR]))
