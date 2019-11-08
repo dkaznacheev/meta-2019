@@ -89,41 +89,33 @@
              ["next1" [:= pi (+ 1 pi)] (goto "loop")]
              ["exit" (return tape)]))
 
-#| (define mix '((read
-               program
-               division
-               vs0
-               pending
-               residual
-               pp vs bb
-               asgn
-               b-asgns b-jmp
-               lbl asgns jmp command
-               marked)
-              ([init ([:= program (car input)]
-                      [:= division (cadr input)]
-                      [:= vs0 (caddr input)]
-                      [:= pending (list (list (first-label program) vs0))]
-                      [:= residual '()]
-                      [:= marked '()]) (goto mainloop)]
-               [mainloop () (if (null? pending) exit initblock)]
-               [initblock ([:= pp (caar pending)]
-                           [:= vs (cadar pending)]
-                           [:= pending (cdr pending)]
-                           [:= bb (find-block pp (cadr program))]
-                           [:= b-asgns (cadr bb)]
-                           [:= b-jmp (caddr bb)]
-                           [:= lbl (list pp vs)]
-                           [:= asgns '()]) (goto asgn-loop)]
-               [asgn-loop () (if (null? b-asgns) mix-jmp mix-asgn)]
-               [mix-asgn ([:= command (car b-asgns)]
-                          [:= b-asgns (cdr b-asgns)]) (if (is-static division (cadr command)) s-asgn d-asgn)]
-               [s-asgn ([:= vs (update-ctx command vs)] (goto asgn-loop))]
-               [d-asgn ([:= asgns (append asgns (list (
-                                                 list (:= (cadr command) (reduce (caddr command) vs)))))])
-                       (goto asgn-loop)]
-               [mix-jmp
+
+(define mix '((read program division vs0)
+              (init          [:= pending (list (list (cadr program) vs0))]
+                             [:= residual '()]
+                             [:= marked '()]
+                             [goto mainloop])
+              (mainloop      [if (null? pending) exit initblock])
+              (initblock     [:= pp (caar pending)]
+                             [:= vs (cadar pending)]
+                             [:= pending (cdr pending)]
+                             [:= bb (cdr (find-block pp (cdr program)))]
+                             [:= lbl (list pp vs)]
+                             [:= code (list lbl)]
+                             [goto cmd-loop])
+              (cmd-loop      [if (null? bb) mainloop check-asgn])
+              (check-asgn    [:= cmd (car bb)]
+                             [if (equal? ':= cmd) mix-asgn check-goto])
+               
+              [mix-asgn ([:= command (car b-asgns)]
+                         [:= b-asgns (cdr b-asgns)]) (if (is-static division (cadr command)) s-asgn d-asgn)]
+              [s-asgn ([:= vs (update-ctx command vs)] (goto asgn-loop))]
+              [d-asgn ([:= asgns (append asgns (list (
+                                                      list (:= (cadr command) (reduce (caddr command) vs)))))])
+                      (goto asgn-loop)]
+              
+              (check-goto    [if (equal? goto cmd) mix-goto check-if])
+              (check-if      [if (equal? if cmd) mix-if check-return])
+              (check-return  [if (equal? goto cmd) mix-goto check-if])
                           
                [exit () (return residual)])))
-              
-|#
