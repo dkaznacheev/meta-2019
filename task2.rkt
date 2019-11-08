@@ -1,18 +1,7 @@
 #lang racket
-
-(define (set-helper p l i v)
-  (if (equal? 0 (length l))
-      p
-      (if (equal? i 0)
-          (append p (cons v (cdr l)))
-          (set-helper (append p (list (car l))) (cdr l) (- i 1) v))))
-
-(define (setnth l i v)
-  (set-helper '() l i v))
-
-
+;-- intp
 (define (make-ctx prg input)
-   (map list (cdar prg) input))
+   (map list (cdar prg) (map (lambda (v) `',v) input)))
 
 (define (find-block label prg)
   (car (filter
@@ -26,13 +15,14 @@
 (define (update-ctx asgn ctx)
   (let ([name (cadr asgn)]
         [value (run-expr (caddr asgn) ctx)])
-    (map (lambda (p)
-           (if (equal? name (car p)) (list name `',value) p)) ctx)))
+    (cons (list name `',value) (filter (lambda (p)
+           (not (equal? name (car p)))) ctx))))
+
 
 (define (run-expr e ctx)
-  (printf "expr: ~a\n" e)
-  (printf "ctx: ~a\n" ctx)
+  ;(printf "~a\n~e\n\n" ctx e)
   (eval `(let ,ctx ,e)))
+
 
 (define (run-commands ctx commands prg)
   (let ([cmd (car commands)])
@@ -50,7 +40,17 @@
   (let ([ctx (make-ctx prg input)]
         [start-label (caadr prg)])
    (run-block start-label ctx prg)))
+;-- TM
 
+(define (set-helper p l i v)
+  (if (equal? 0 (length l))
+      p
+      (if (equal? i 0)
+          (append p (cons v (cdr l)))
+          (set-helper (append p (list (car l))) (cdr l) (- i 1) v))))
+
+(define (setnth l i v)
+  (set-helper '() l i v))
 
 (define tm-prg '([if 1 goto 4]
                  [write 1]
@@ -69,28 +69,25 @@
     (found (return (car valuelist)))
     ))
 
-(define tm `((read p pi ti tape inst)
-             (["init" ([:= tape (car input)]
-                       [:= p (cadr input)]
-                       [:= ti 0]
-                       [:= pi 0]) (goto "loop")]
-              ["loop" ([:= inst (list-ref p pi)]) (goto "ifl")]
-              ["ifl" () (if (equal? (car inst) 'left) "left" "ifr")]
-              ["left" ([:= ti (- ti 1)]) (goto "next")]
-              ["ifr" () (if (equal? (car inst) 'right) "right" "ifw")]
-              ["right" ([:= ti (+ ti 1)]) (goto "next")]
-              ["ifw" () (if (equal? (car inst) 'write) "write" "ifgt")]
-              ["write" ([:= tape (setnth tape ti (cadr inst))]) (goto "next")]
-              ["ifgt" () (if (equal? (car inst) 'goto) "goto" "ifif")]
-              ["goto" ([:= pi (cadr inst)]) (goto "loop")]
-              ["ifif" () (if (equal? (car inst) 'if) "if" "exit")]
-              ["if" () (if (equal? (list-ref tape ti) (cadr inst)) "lb" "next")]
-              ["lb" ([:= pi (cadddr inst)]) (goto "loop")]
-              ["next" () (if (equal? (+ 1 pi) (length p)) "exit" "next1")]
-              ["next1" ([:= pi (+ 1 pi)]) (goto "loop")]
-              ["exit" () (return tape)])))
-
-(define check-fn '(run find_name '('b '(a b c d) '(1 2 3 4))))
+(define tm `((read tape p)
+             ["init" [:= ti 0]
+                     [:= pi 0]
+                     [goto "loop"]]
+             ["loop" [:= inst (list-ref p pi)] [goto "ifl"]]
+             ["ifl" (if (equal? (car inst) 'left) "left" "ifr")]
+             ["left" [:= ti (- ti 1)] (goto "next")]
+             ["ifr" (if (equal? (car inst) 'right) "right" "ifw")]
+             ["right" [:= ti (+ ti 1)] (goto "next")]
+             ["ifw" (if (equal? (car inst) 'write) "write" "ifgt")]
+             ["write" [:= tape (setnth tape ti (cadr inst))] (goto "next")]
+             ["ifgt" (if (equal? (car inst) 'goto) "goto" "ifif")]
+             ["goto" [:= pi (cadr inst)] (goto "loop")]
+             ["ifif" (if (equal? (car inst) 'if) "if" "exit")]
+             ["if" (if (equal? (list-ref tape ti) (cadr inst)) "lb" "next")]
+             ["lb" [:= pi (cadddr inst)] (goto "loop")]
+             ["next" (if (equal? (+ 1 pi) (length p)) "exit" "next1")]
+             ["next1" [:= pi (+ 1 pi)] (goto "loop")]
+             ["exit" (return tape)]))
 
 #| (define mix '((read
                program
