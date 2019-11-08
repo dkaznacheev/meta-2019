@@ -1,0 +1,132 @@
+#lang racket
+
+(define (set-helper p l i v)
+  (if (equal? 0 (length l))
+      p
+      (if (equal? i 0)
+          (append p (cons v (cdr l)))
+          (set-helper (append p (list (car l))) (cdr l) (- i 1) v))))
+
+(define (setnth l i v)
+  (set-helper '() l i v))
+
+
+(define (make-ctx prg input)
+   (map list (cdar prg) input))
+
+(define (find-block label prg)
+  (car (filter
+        (lambda (block) (equal? (car block) label))
+        prg)))
+
+(define (run-block label ctx prg)
+  (let ([block (find-block label prg)])
+    (run-commands ctx (cdr block) prg)))
+
+(define (update-ctx asgn ctx)
+  (let ([name (cadr asgn)]
+        [value (run-expr (caddr asgn) ctx)])
+    (map (lambda (p)
+           (if (equal? name (car p)) (list name `',value) p)) ctx)))
+
+(define (run-expr e ctx)
+  (printf "expr: ~a\n" e)
+  (printf "ctx: ~a\n" ctx)
+  (eval `(let ,ctx ,e)))
+
+(define (run-commands ctx commands prg)
+  (let ([cmd (car commands)])
+    (match (car cmd)
+      [':= (run-commands (update-ctx cmd ctx) (cdr commands) prg)]
+      ['goto (run-block (cadr cmd) ctx prg)]
+      ['if (if (run-expr (cadr cmd) ctx)
+               (run-block (caddr cmd) ctx prg)
+               (run-block (cadddr cmd) ctx prg))]
+      ['return (run-expr (cadr cmd) ctx)])))
+
+
+
+(define (run prg input)
+  (let ([ctx (make-ctx prg input)]
+        [start-label (caadr prg)])
+   (run-block start-label ctx prg)))
+
+
+(define tm-prg '([if 1 goto 4]
+                 [write 1]
+                 [right]
+                 [goto 0]
+                 [write 0]))
+(define tape '(0 0 0 1 0 1))
+(define tm-in `(,tape ,tm-prg))
+
+(define find_name
+  '((read name namelist valuelist)
+    (search (if (equal? name (car namelist)) found cont))
+    (cont (:= valuelist (cdr valuelist))
+          (:= namelist (cdr namelist))
+          (goto search))
+    (found (return (car valuelist)))
+    ))
+
+(define tm `((read p pi ti tape inst)
+             (["init" ([:= tape (car input)]
+                       [:= p (cadr input)]
+                       [:= ti 0]
+                       [:= pi 0]) (goto "loop")]
+              ["loop" ([:= inst (list-ref p pi)]) (goto "ifl")]
+              ["ifl" () (if (equal? (car inst) 'left) "left" "ifr")]
+              ["left" ([:= ti (- ti 1)]) (goto "next")]
+              ["ifr" () (if (equal? (car inst) 'right) "right" "ifw")]
+              ["right" ([:= ti (+ ti 1)]) (goto "next")]
+              ["ifw" () (if (equal? (car inst) 'write) "write" "ifgt")]
+              ["write" ([:= tape (setnth tape ti (cadr inst))]) (goto "next")]
+              ["ifgt" () (if (equal? (car inst) 'goto) "goto" "ifif")]
+              ["goto" ([:= pi (cadr inst)]) (goto "loop")]
+              ["ifif" () (if (equal? (car inst) 'if) "if" "exit")]
+              ["if" () (if (equal? (list-ref tape ti) (cadr inst)) "lb" "next")]
+              ["lb" ([:= pi (cadddr inst)]) (goto "loop")]
+              ["next" () (if (equal? (+ 1 pi) (length p)) "exit" "next1")]
+              ["next1" ([:= pi (+ 1 pi)]) (goto "loop")]
+              ["exit" () (return tape)])))
+
+(define check-fn '(run find_name '('b '(a b c d) '(1 2 3 4))))
+
+#| (define mix '((read
+               program
+               division
+               vs0
+               pending
+               residual
+               pp vs bb
+               asgn
+               b-asgns b-jmp
+               lbl asgns jmp command
+               marked)
+              ([init ([:= program (car input)]
+                      [:= division (cadr input)]
+                      [:= vs0 (caddr input)]
+                      [:= pending (list (list (first-label program) vs0))]
+                      [:= residual '()]
+                      [:= marked '()]) (goto mainloop)]
+               [mainloop () (if (null? pending) exit initblock)]
+               [initblock ([:= pp (caar pending)]
+                           [:= vs (cadar pending)]
+                           [:= pending (cdr pending)]
+                           [:= bb (find-block pp (cadr program))]
+                           [:= b-asgns (cadr bb)]
+                           [:= b-jmp (caddr bb)]
+                           [:= lbl (list pp vs)]
+                           [:= asgns '()]) (goto asgn-loop)]
+               [asgn-loop () (if (null? b-asgns) mix-jmp mix-asgn)]
+               [mix-asgn ([:= command (car b-asgns)]
+                          [:= b-asgns (cdr b-asgns)]) (if (is-static division (cadr command)) s-asgn d-asgn)]
+               [s-asgn ([:= vs (update-ctx command vs)] (goto asgn-loop))]
+               [d-asgn ([:= asgns (append asgns (list (
+                                                 list (:= (cadr command) (reduce (caddr command) vs)))))])
+                       (goto asgn-loop)]
+               [mix-jmp
+                          
+               [exit () (return residual)])))
+              
+|#
