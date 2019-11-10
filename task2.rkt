@@ -89,6 +89,19 @@
              ["next1" [:= pi (+ 1 pi)] (goto "loop")]
              ["exit" (return tape)]))
 
+;-- mix
+
+(define (is-static division var)
+  (member var (car division)))
+
+(define (reduce expr vs)
+   `(let ,vs ,expr))
+
+(define (is-static-expr division expr)
+  (if (list? expr)
+      (if (empty? expr) #t
+          (andmap (lambda (a) (is-static-expr division a)) (cdr expr)))
+      (not (member expr (cadr division)))))
 
 (define mix '((read program division vs0)
               (init          [:= pending (list (list (cadr program) vs0))]
@@ -103,7 +116,7 @@
                              [:= lbl (list pp vs)]
                              [:= code (list lbl)]
                              [goto cmd-loop])
-              (cmd-loop      [if (null? bb) mainloop cmd-init])
+              (cmd-loop      [if (null? bb) add-block cmd-init])
               (cmd-init      [:= command (car bb)]
                              [:= cmd (car command)]
                              [:= bb (cdr bb)]
@@ -112,7 +125,7 @@
               (mix-asgn      [if (is-static division (cadr command)) s-asgn d-asgn])
               (s-asgn        [:= vs (update-ctx (caddr command) vs)]
                              [goto cmd-loop])
-              (d-asgn        [:= code (append code (list (:= (cadr command) (reduce (caddr command) vs))))]
+              (d-asgn        [:= code (append code (list (':= (cadr command) (reduce (caddr command) vs))))]
                              [goto cmd-loop])
               
               (check-goto    [if (equal? goto cmd) mix-goto check-if])
@@ -120,7 +133,31 @@
                              [goto cmd-loop])
               
               (check-if      [if (equal? if cmd) mix-if check-return])
+              (mix-if        [:= expr (cadr command)]
+                             [:= ppt (caddr command)]
+                             [:= ppf (cadddr command)]
+                             [if (is-static-expr division expr) s-if d-if])
+              (s-if          [:= ppr (if (run-expr expr vs) ppt ppf)]
+                             [:= bb (cdr (find-block ppr program))]
+                             [goto cmd-loop])
+              (d-if          [:= pending (append pending (new-pending marked (list ppt vs) (list ppf vs)))]
+                             [:= code (append code (list 'if reduce(expr, vs) (list ppt vs) (list ppf vs)))]
+                             [goto cmd-loop])
+              
               (check-return  [if (equal? goto cmd) mix-return check-if])
+              (mix-return    [:= code (append code (list 'return reduce(expr, vs)))]
+                             [goto cmd-loop])
 
+              (add-block     [:= residual (append residual (list code))]
+                             [goto mainloop])
               (exit          [return residual])
-              (error         [return 'ERROR]))
+              (error         [return 'ERROR])))
+
+(define p-fc '((read a b)
+               (l1 [:= b 3]
+                   [goto l2])
+               (l2 [return (+ a b)])))
+
+(define p-div '((a) (b)))
+(define p-vs0 '((a 1) (b 3)))
+               
