@@ -1,4 +1,7 @@
 #lang racket
+
+(provide main)
+
 ;-- intp
 (define (make-ctx prg input)
    (map list (cdar prg) (map (lambda (v) `',v) input)))
@@ -10,7 +13,7 @@
 
 (define (run-block label ctx prg)
   (let ([block (find-block label prg)])
-    (printf ">~e\n" label)
+    ;(printf ">~e\n" label)
     (run-commands ctx (cdr block) prg)))
 
 (define (update-ctx asgn ctx)
@@ -26,7 +29,7 @@
 
 (define (run-commands ctx commands prg)
   (let ([cmd (car commands)])
-    (printf ">>~e\n" cmd)
+    ;(printf ">>~e\n" cmd)
     (match (car cmd)
       [':= (run-commands (update-ctx cmd ctx) (cdr commands) prg)]
       ['goto (run-block (cadr cmd) ctx prg)]
@@ -53,11 +56,8 @@
 (define (setnth l i v)
   (set-helper '() l i v))
 
-(define tm-prg '([if 1 goto 4]
-                 [write 1]
-                 [right]
-                 [goto 0]
-                 [write 0]))
+(define tm-prg '([right 1]
+                 [write 1]))
 (define tape '(0 0 0 1 0 1))
 (define tm-in `(,tape ,tm-prg))
 
@@ -90,6 +90,9 @@
              ["next1" [:= pi (+ 1 pi)] (goto "loop")]
              ["exit" (return tape)]))
 
+(define tm-div
+  '((p) (ti pi tape inst)))
+
 ;-- mix
 
 (define (is-static division var)
@@ -116,7 +119,7 @@
       (not (member expr (cadr division)))))
 
 (define (out s ex)
-  (printf "!~e: ~e\n" s ex)
+  ;(printf "!~e: ~e\n" s ex)
   ex)
 
 (define (new-pending marked p)
@@ -145,16 +148,15 @@
                              [:= bb (cdr bb)]
                              [goto check-asgn])
               (check-asgn    [if (equal? ':= cmd) mix-asgn check-goto])
-              (mix-asgn      [:= tmp (out "" "mix-asgn")]
-                             [if (is-static division (cadr command)) s-asgn d-asgn])
-              (s-asgn        [:= vs (update-ctx (caddr command) vs)]
+              (mix-asgn      [if (is-static division (cadr command)) s-asgn d-asgn])
+              (s-asgn        [:= vs (update-ctx (list ':= (cadr command) (reduce (caddr command) vs)) vs)]
                              [goto cmd-loop])
-              (d-asgn        [:= code (append code (list (':= (cadr command) (reduce (caddr command) vs))))]
+              (d-asgn        [:= tmp (out ""  (reduce (caddr command) vs))]
+                             [:= code (append code (list (list ':= (cadr command) (reduce (caddr command) vs))))]
                              [goto cmd-loop])
               
               (check-goto    [if (equal? 'goto cmd) mix-goto check-if])
               (mix-goto      [:= bb (cdr (find-block (cadr command) program))]
-                             [:= tmp (out "" "mix-goto")]
                              [goto cmd-loop])
               
               (check-if      [if (equal? 'if cmd) mix-if check-return])
@@ -183,9 +185,8 @@
               (error         [return 'ERROR])))
 
 (define p-fc '((read a c)
-               (l1 [if (equal? a c) l2 l3])
-               (l2 [return a])
-               (l3 [return c])))
+               (l1 [:= c (+ a c)] [goto l2])
+               (l2 [return c])))
 
 (define p-div '((a) (c)))
 (define p-vs0 '((a 3)))
@@ -195,9 +196,22 @@
 (define (pprint prg)
   (printf "\n\n")
   (for-each (lambda (cmd) (printf "~e\n" cmd)) prg))
+  (printf "\n\n")
 
 (define (mix-and-run mix-input run-input)
-  (run (run mix mix-input) run-input))
+  (let ([mixed (run mix mix-input)])
+    (pprint mixed)
+    (run mixed run-input)))
+
+(define (futamura-1-naive-simple)
+  (mix-and-run p-in '(3)))
 
 (define (futamura-1-naive)
-  (mix-and-run p-in '(2)))
+  (let* ([p-fc tm]
+         [p-div '((p) (ti pi tape inst))]
+         [p-vs0 `((p ,tm-prg))]
+         [p-in `(,p-fc ,p-div ,p-vs0)])
+  (mix-and-run p-in tape)))
+
+(define (main)
+  (futamura-1-naive-simple))
