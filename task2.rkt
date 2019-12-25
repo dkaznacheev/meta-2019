@@ -10,6 +10,7 @@
 
 (define (run-block label ctx prg)
   (let ([block (find-block label prg)])
+    (printf ">~e\n" label)
     (run-commands ctx (cdr block) prg)))
 
 (define (update-ctx asgn ctx)
@@ -18,7 +19,6 @@
     (cons (list name `',value) (filter (lambda (p)
            (not (equal? name (car p)))) ctx))))
 
-
 (define (run-expr e ctx)
   ;(printf "~a\n~e\n\n" ctx e)
   (eval `(let ,ctx ,e)))
@@ -26,6 +26,7 @@
 
 (define (run-commands ctx commands prg)
   (let ([cmd (car commands)])
+    (printf ">>~e\n" cmd)
     (match (car cmd)
       [':= (run-commands (update-ctx cmd ctx) (cdr commands) prg)]
       ['goto (run-block (cadr cmd) ctx prg)]
@@ -95,7 +96,18 @@
   (member var (car division)))
 
 (define (reduce expr vs)
-   `(let ,vs ,expr))
+  (define (handle-error e) 
+    (match e
+      [(list es ...) (map do-eval e)]
+      [_  e]))
+  (define (do-eval e)
+    (with-handlers
+      ([exn:fail? (λ (err) (handle-error e))])
+      `',(run-expr e vs)))
+  (do-eval expr))
+
+;(define (reduce expr vs)
+;   (eval `(let ,vs ,expr)))
 
 (define (is-static-expr division expr)
   (if (list? expr)
@@ -103,14 +115,24 @@
           (andmap (lambda (a) (is-static-expr division a)) (cdr expr)))
       (not (member expr (cadr division)))))
 
+(define (out s ex)
+  (printf "!~e: ~e\n" s ex)
+  ex)
+
+(define (new-pending marked p)
+  (if (member p marked) '() (list p)))
+
 (define mix '((read program division vs0)
-              (init          [:= pending (list (list (cadr program) vs0))]
-                             [:= residual '()]
+              (init          [:= pending (list (list (caadr program) vs0))]
+                             [:= residual (list (append (list 'read) (cadr division)))]
                              [:= marked '()]
                              [goto mainloop])
               (mainloop      [if (null? pending) exit initblock])
-              (initblock     [:= pp (caar pending)]
+              (initblock     [:= tmp (out "pending" pending)]
+                             [:= pp (caar pending)]
                              [:= vs (cadar pending)]
+                             [:= marked (append marked (car pending))]
+                             [:= tmp (out "marked" marked)]
                              [:= pending (cdr pending)]
                              [:= bb (cdr (find-block pp program))]
                              [:= lbl (list pp vs)]
@@ -119,20 +141,23 @@
               (cmd-loop      [if (null? bb) add-block cmd-init])
               (cmd-init      [:= command (car bb)]
                              [:= cmd (car command)]
+                             [:= tmp (out "CMD" cmd)]
                              [:= bb (cdr bb)]
                              [goto check-asgn])
               (check-asgn    [if (equal? ':= cmd) mix-asgn check-goto])
-              (mix-asgn      [if (is-static division (cadr command)) s-asgn d-asgn])
+              (mix-asgn      [:= tmp (out "" "mix-asgn")]
+                             [if (is-static division (cadr command)) s-asgn d-asgn])
               (s-asgn        [:= vs (update-ctx (caddr command) vs)]
                              [goto cmd-loop])
               (d-asgn        [:= code (append code (list (':= (cadr command) (reduce (caddr command) vs))))]
                              [goto cmd-loop])
               
-              (check-goto    [if (equal? goto cmd) mix-goto check-if])
+              (check-goto    [if (equal? 'goto cmd) mix-goto check-if])
               (mix-goto      [:= bb (cdr (find-block (cadr command) program))]
+                             [:= tmp (out "" "mix-goto")]
                              [goto cmd-loop])
               
-              (check-if      [if (equal? if cmd) mix-if check-return])
+              (check-if      [if (equal? 'if cmd) mix-if check-return])
               (mix-if        [:= expr (cadr command)]
                              [:= ppt (caddr command)]
                              [:= ppf (cadddr command)]
@@ -140,12 +165,16 @@
               (s-if          [:= ppr (if (run-expr expr vs) ppt ppf)]
                              [:= bb (cdr (find-block ppr program))]
                              [goto cmd-loop])
-              (d-if          [:= pending (append pending (new-pending marked (list ppt vs) (list ppf vs)))]
-                             [:= code (append code (list 'if reduce(expr, vs) (list ppt vs) (list ppf vs)))]
+              (d-if          [:= pending (append pending (new-pending marked (list ppt vs)))]
+                             [:= pending (append pending (new-pending marked (list ppf vs)))]
+                             [:= code (append code (list 'if (reduce expr vs) (list ppt vs) (list ppf vs)))]
                              [goto cmd-loop])
               
-              (check-return  [if (equal? goto cmd) mix-return check-if])
-              (mix-return    [:= code (append code (list 'return reduce(expr, vs)))]
+              (check-return  [if (equal? 'return cmd) mix-return error])
+              (mix-return    [:= expr (cadr command)]
+                             [:= tmp (out "expr" expr)]
+                             [:= tmp (out "vs" vs)]
+                             [:= code (append code (list 'return (reduce expr vs)))]
                              [goto cmd-loop])
 
               (add-block     [:= residual (append residual (list code))]
@@ -153,11 +182,16 @@
               (exit          [return residual])
               (error         [return 'ERROR])))
 
-(define p-fc '((read a b)
-               (l1 [:= b 3]
-                   [goto l2])
-               (l2 [return (+ a b)])))
+(define p-fc '((read a c)
+               (l1 [if (equal? a c) l2 l3])
+               (l2 [return a])
+               (l3 [return c])))
 
-(define p-div '((a) (b)))
-(define p-vs0 '((a 1) (b 3)))
-               
+(define p-div '((a) (c)))
+(define p-vs0 '((a 3)))
+
+(define p-in `(,p-fc ,p-div ,p-vs0))
+
+(define (pprint prg)
+  (printf "\n\n")
+  (for-each (lambda (cmd) (printf "~e\n" cmd)) prg))
