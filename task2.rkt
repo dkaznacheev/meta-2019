@@ -167,14 +167,14 @@
                              [goto cmd-loop])
               (d-if          [:= pending (append pending (new-pending marked (list ppt vs)))]
                              [:= pending (append pending (new-pending marked (list ppf vs)))]
-                             [:= code (append code (list 'if (reduce expr vs) (list ppt vs) (list ppf vs)))]
+                             [:= code (append code (list (list 'if (reduce expr vs) (list ppt vs) (list ppf vs))))]
                              [goto cmd-loop])
               
               (check-return  [if (equal? 'return cmd) mix-return error])
               (mix-return    [:= expr (cadr command)]
                              [:= tmp (out "expr" expr)]
                              [:= tmp (out "vs" vs)]
-                             [:= code (append code (list 'return (reduce expr vs)))]
+                             [:= code (append code (list (list 'return (reduce expr vs))))]
                              [goto cmd-loop])
 
               (add-block     [:= residual (append residual (list code))]
@@ -195,3 +195,9 @@
 (define (pprint prg)
   (printf "\n\n")
   (for-each (lambda (cmd) (printf "~e\n" cmd)) prg))
+
+(define (mix-and-run mix-input run-input)
+  (run (run mix mix-input) run-input))
+
+(define (futamura-1-naive)
+  (mix-and-run p-in '(2)))
