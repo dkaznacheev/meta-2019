@@ -110,26 +110,6 @@
     )
   )
 
-(define tm `((read tape p)
-             ["init" [:= ti 0]
-                     [:= pi 0]
-                     [goto "loop"]]
-             ["loop" [:= inst (list-ref p pi)] [goto "ifl"]]
-             ["ifl" (if (equal? (car inst) 'left) "left" "ifr")]
-             ["left" [:= ti (- ti 1)] (goto "next")]
-             ["ifr" (if (equal? (car inst) 'right) "right" "ifw")]
-             ["right" [:= ti (+ ti 1)] (goto "next")]
-             ["ifw" (if (equal? (car inst) 'write) "write" "ifgt")]
-             ["write" [:= tape (setnth tape ti (cadr inst))] (goto "next")]
-             ["ifgt" (if (equal? (car inst) 'goto) "goto" "ifif")]
-             ["goto" [:= pi (cadr inst)] (goto "loop")]
-             ["ifif" (if (equal? (car inst) 'if) "if" "exit")]
-             ["if" (if (equal? (list-ref tape ti) (cadr inst)) "lb" "next")]
-             ["lb" [:= pi (cadddr inst)] (goto "loop")]
-             ["next" (if (equal? (+ 1 pi) (length p)) "exit" "next1")]
-             ["next1" [:= pi (+ 1 pi)] (goto "loop")]
-             ["exit" (return tape)]))
-
 (define tm-div
   '((p pi inst) (ti tape)))
 
@@ -171,15 +151,12 @@
                              [:= marked '()]
                              [goto mainloop])
               (mainloop      [if (null? pending) exit initblock])
-              (initblock     [:= tmp (out "pending" pending)]
-                             [:= pp (caar pending)]
+              (initblock     [:= pp (caar pending)]
                              [:= vs (cadar pending)]
                              [:= marked (append marked (car pending))]
-                             [:= tmp (out "marked" marked)]
                              [:= pending (cdr pending)]
                              [:= bb (cdr (find-block pp program))]
-                             [:= lbl (list pp vs)]
-                             [:= code (list lbl)]
+                             [:= code (list (list pp vs))]
                              [goto cmd-loop])
               (cmd-loop      [if (null? bb) add-block cmd-init])
               (cmd-init      [:= command (car bb)]
@@ -188,14 +165,9 @@
                              [goto check-asgn])
               (check-asgn    [if (equal? ':= cmd) mix-asgn check-goto])
               (mix-asgn      [if (is-static division (cadr command)) s-asgn d-asgn])
-              (s-asgn        ;[:= tmp (out "ctx" vs)]
-                             [:= newvar (list ':= (cadr command) (reduce (caddr command) vs))]
-                             ;[:= tmp (out "ctx" vs)]
-                             ;[:= tmp (out "nv" newvar)]
-                             [:= vs (update-ctx newvar vs)]
+              (s-asgn        [:= vs (update-ctx (list ':= (cadr command) (reduce (caddr command) vs)) vs)]
                              [goto cmd-loop])
-              (d-asgn        [:= tmp (out ""  (reduce (caddr command) vs))]
-                             [:= code (append code (list (list ':= (cadr command) (reduce (caddr command) vs))))]
+              (d-asgn        [:= code (append code (list (list ':= (cadr command) (reduce (caddr command) vs))))]
                              [goto cmd-loop])
               
               (check-goto    [if (equal? 'goto cmd) mix-goto check-if])
@@ -207,19 +179,16 @@
                              [:= ppt (caddr command)]
                              [:= ppf (cadddr command)]
                              [if (is-static-expr division expr) s-if d-if])
-              (s-if          ;[:= tmp (out "expr" expr)]
-                             [:= ppr (if (run-expr expr vs) ppt ppf)]
+              (s-if          [:= ppr (if (run-expr expr vs) ppt ppf)]
                              [:= bb (cdr (find-block ppr program))]
                              [goto cmd-loop])
               (d-if          [:= pending (append pending (new-pending marked (list ppt vs)))]
                              [:= pending (append pending (new-pending marked (list ppf vs)))]
                              [:= code (append code (list (list 'if (reduce expr vs) (list ppt vs) (list ppf vs))))]
                              [goto cmd-loop])
-              
+
               (check-return  [if (equal? 'return cmd) mix-return error])
               (mix-return    [:= expr (cadr command)]
-                             [:= tmp (out "expr" expr)]
-                             [:= tmp (out "vs" vs)]
                              [:= code (append code (list (list 'return (reduce expr vs))))]
                              [goto cmd-loop])
 
@@ -260,3 +229,10 @@
 
 (define (main)
   (futamura-1-naive))
+
+(define (futamura-2-naive)
+  (let* ([p-fc mix]
+         [p-div '((program division)(vs0 pending residual marked pp vs bb code command cmd expr ppt ppf ppr))]
+         [p-vs0 (list tm-int '((Q Qtail op cmd) (Right)))]
+         [p-in `(,p-fc ,p-div ,p-vs0)])
+    (mix-and-run p-in (list tm-int))))
